@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 """Refresh the Description column of the README table from each org's GitHub About text.
 
 - If the org has an About text, it replaces the description in the row.
 - If the org has none, the description already in the row stays.
 - A row whose description ends with <!-- keep --> is never touched.
 """
+import argparse
 import json
 import os
 import re
@@ -12,7 +14,7 @@ import sys
 import urllib.error
 import urllib.request
 
-README = "README.md"
+DEFAULT_README = "README.md"
 KEEP = "<!-- keep -->"
 
 ROW = re.compile(
@@ -49,10 +51,20 @@ def clean(text):
 
 
 def main():
-    with open(README, newline="", encoding="utf-8") as f:
-        lines = f.readlines()
+    parser = argparse.ArgumentParser(description="Refresh README table descriptions from GitHub org profiles.")
+    parser.add_argument("--readme", default=DEFAULT_README, help="Path to the README file (default: README.md)")
+    parser.add_argument("--dry-run", action="store_true", help="Preview changes without modifying the file")
+    args = parser.parse_args()
+
+    try:
+        with open(args.readme, newline="", encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        print(f"Error: Could not find README file at '{args.readme}'", file=sys.stderr)
+        return 1
 
     changed = 0
+    scanned = 0
     out = []
     for line in lines:
         body = line.rstrip("\r\n")
@@ -62,6 +74,7 @@ def main():
             out.append(line)
             continue
 
+        scanned += 1
         head, login, current, tail = m.groups()
         if KEEP in current:
             out.append(line)
@@ -75,10 +88,13 @@ def main():
         else:
             out.append(line)
 
-    if changed:
-        with open(README, "w", newline="", encoding="utf-8") as f:
+    if changed and not args.dry_run:
+        with open(args.readme, "w", newline="", encoding="utf-8") as f:
             f.writelines(out)
-    print(f"{changed} description(s) updated")
+
+    mode_label = " [DRY RUN]" if args.dry_run else ""
+    print(f"Scanned {scanned} organization row(s). {changed} description(s) updated.{mode_label}")
+    return 0
 
 
 if __name__ == "__main__":
